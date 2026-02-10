@@ -1,0 +1,205 @@
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+} from "discord.js";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import readline from "node:readline";
+import { getProject } from "../../db/database.js";
+
+interface SessionInfo {
+  sessionId: string;
+  firstMessage: string;
+  timestamp: string;
+  fileSize: number;
+}
+
+/**
+ * Find the Claude session directory for a given project path.
+ * Claude Code stores sessions in ~/.claude/projects/<encoded-path>/
+ * The encoding isn't just simple "/" -> "-" replacement (also replaces "_" etc.)
+ * So we find the correct directory by checking JSONL file contents.
+ */
+function findSessionDir(projectPath: string): string | null {
+  const claudeDir = path.join(os.homedir(), ".claude", "projects");
+  if (!fs.existsSync(claudeDir)) return null;
+
+  // Try simple conversion first
+  const simpleName = projectPath.replace(/\//g, "-");
+  const simplePath = path.join(claudeDir, simpleName);
+  if (fs.existsSync(simplePath)) return simplePath;
+
+  // Fallback: scan directories and match by reading JSONL cwd field
+  const dirs = fs.readdirSync(claudeDir);
+  for (const dir of dirs) {
+    const dirPath = path.join(claudeDir, dir);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+
+    const jsonlFiles = fs.readdirSync(dirPath).filter((f) => f.endsWith(".jsonl"));
+    if (jsonlFiles.length === 0) continue;
+
+    // Read first few lines of the first JSONL to check cwd
+    const firstFile = path.join(dirPath, jsonlFiles[0]);
+    const content = fs.readFileSync(firstFile, { encoding: "utf-8" });
+    const lines = content.split("\n").slice(0, 10);
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.cwd === projectPath) return dirPath;
+      } catch {
+        // skip
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Read the first user message from a JSONL session file.
+ */
+async function getFirstUserMessage(filePath: string): Promise<{ text: string; timestamp: string }> {
+  const stream = fs.createReadStream(filePath, { encoding: "utf-8" });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+  let timestamp = "";
+  let text = "";
+
+  for await (const line of rl) {
+    try {
+      const entry = JSON.parse(line);
+
+      // Grab timestamp from first line
+      if (!timestamp && entry.timestamp) {
+        timestamp = entry.timestamp;
+      }
+
+      // Find first user message with text content
+      if (entry.type === "user" && entry.message?.content) {
+        const content = entry.message.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && block.text) {
+              text = block.text;
+              break;
+            }
+          }
+        } else if (typeof content === "string") {
+          text = content;
+        }
+        if (text) break;
+      }
+    } catch {
+      // skip malformed lines
+    }
+  }
+
+  rl.close();
+  stream.destroy();
+
+  return { text: text || "(empty session)", timestamp };
+}
+
+/**
+ * List all session JSONL files for a given project path.
+ */
+async function listSessions(projectPath: string): Promise<SessionInfo[]> {
+  const sessionDir = findSessionDir(projectPath);
+  if (!sessionDir) return [];
+
+  const files = fs.readdirSync(sessionDir).filter((f) => f.endsWith(".jsonl"));
+  const sessions: SessionInfo[] = [];
+
+  for (const file of files) {
+    const filePath = path.join(sessionDir, file);
+    const stat = fs.statSync(filePath);
+    const sessionId = file.replace(".jsonl", "");
+
+    const { text, timestamp } = await getFirstUserMessage(filePath);
+
+    sessions.push({
+      sessionId,
+      firstMessage: text.slice(0, 80),
+      timestamp: timestamp || stat.mtime.toISOString(),
+      fileSize: stat.size,
+    });
+  }
+
+  // Sort by most recent first
+  sessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  return sessions;
+}
+
+export const data = new SlashCommandBuilder()
+  .setName("sessions")
+  .setDescription("List and resume existing Claude Code sessions for this project");
+
+export async function execute(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const channelId = interaction.channelId;
+  const project = getProject(channelId);
+
+  if (!project) {
+    await interaction.editReply({
+      content: "This channel is not registered to any project. Use `/register` first.",
+    });
+    return;
+  }
+
+  const sessions = await listSessions(project.project_path);
+
+  if (sessions.length === 0) {
+    await interaction.editReply({
+      content: `No existing sessions found for \`${project.project_path}\``,
+    });
+    return;
+  }
+
+  // Build select menu (max 25 options)
+  const options = sessions.slice(0, 25).map((s, i) => {
+    const date = new Date(s.timestamp);
+    const dateStr = date.toLocaleDateString("ko-KR", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const sizeKB = Math.round(s.fileSize / 1024);
+    const label = s.firstMessage.slice(0, 50) || `Session ${i + 1}`;
+    const desc = `${dateStr} | ${sizeKB}KB | ${s.sessionId.slice(0, 8)}...`;
+
+    return {
+      label,
+      description: desc,
+      value: s.sessionId,
+    };
+  });
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId("session-select")
+    .setPlaceholder("Select a session to resume...")
+    .addOptions(options);
+
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  await interaction.editReply({
+    embeds: [
+      {
+        title: "Claude Code Sessions",
+        description: [
+          `Project: \`${project.project_path}\``,
+          `Found **${sessions.length}** session(s)`,
+          "",
+          "Select a session below to resume it. Your next message will continue that conversation.",
+        ].join("\n"),
+        color: 0x7c3aed,
+      },
+    ],
+    components: [row],
+  });
+}
