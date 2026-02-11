@@ -28,7 +28,7 @@ function findSessionDir(projectPath: string): string | null {
   if (!fs.existsSync(claudeDir)) return null;
 
   // Try simple conversion first
-  const simpleName = projectPath.replace(/\//g, "-");
+  const simpleName = projectPath.replace(/[\\/]/g, "-");
   const simplePath = path.join(claudeDir, simpleName);
   if (fs.existsSync(simplePath)) return simplePath;
 

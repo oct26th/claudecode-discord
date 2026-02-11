@@ -1,0 +1,121 @@
+@echo off
+chcp 65001 >nul 2>&1
+setlocal enabledelayedexpansion
+
+echo ===================================
+echo  Claude Code Discord Bot Installer
+echo ===================================
+echo.
+
+set NEED_LOGIN=0
+
+:: --- 1. Node.js ---
+echo [1/4] Checking Node.js...
+where node >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   Node.js not found. Installing via winget...
+    where winget >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo   X winget not available.
+        echo   Download Node.js manually from https://nodejs.org
+        echo   After installing, restart this script.
+        pause
+        exit /b 1
+    )
+    winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+    echo   ! Node.js installed. Please restart this script in a new terminal.
+    pause
+    exit /b 0
+)
+
+for /f "tokens=1 delims=." %%a in ('node -v') do set NODE_MAJOR=%%a
+set NODE_MAJOR=%NODE_MAJOR:v=%
+if %NODE_MAJOR% lss 20 (
+    echo   ! Node.js 20+ required. Current: v%NODE_MAJOR%
+    echo   Upgrading via winget...
+    where winget >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo   X winget not available. Download from https://nodejs.org
+        pause
+        exit /b 1
+    )
+    winget upgrade OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+    echo   ! Updated. Please restart this script in a new terminal.
+    pause
+    exit /b 0
+)
+
+for /f "tokens=*" %%v in ('node -v') do echo   Found Node.js %%v
+echo   OK
+echo.
+
+:: --- 2. Claude Code CLI ---
+echo [2/4] Checking Claude Code CLI...
+where claude >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   Claude Code not found. Installing...
+    call npm install -g @anthropic-ai/claude-code
+    if %errorlevel% neq 0 (
+        echo   X Failed to install Claude Code.
+        pause
+        exit /b 1
+    )
+    echo   OK Claude Code installed
+    echo.
+    echo   ! Claude Code login required!
+    echo   Run 'claude' once to complete OAuth login.
+    set NEED_LOGIN=1
+) else (
+    echo   OK Found Claude Code
+)
+echo.
+
+:: --- 3. npm install ---
+echo [3/4] Installing project dependencies...
+call npm install
+if %errorlevel% neq 0 (
+    echo   X npm install failed.
+    echo   If better-sqlite3 fails, install Visual Studio Build Tools:
+    echo   winget install Microsoft.VisualStudio.2022.BuildTools
+    echo   Then select "Desktop development with C++" workload.
+    pause
+    exit /b 1
+)
+echo   OK Done
+echo.
+
+:: --- 4. .env ---
+echo [4/4] Checking .env file...
+if exist .env (
+    echo   .env already exists
+    echo   OK
+) else (
+    if exist .env.example (
+        copy .env.example .env >nul
+        echo   Created .env from .env.example
+        echo   ! Edit .env and fill in your values before running!
+    ) else (
+        echo   ! .env.example not found, skipping
+    )
+)
+echo.
+
+:: --- Done ---
+echo ===================================
+echo  Installation complete!
+echo ===================================
+echo.
+if %NEED_LOGIN%==1 (
+    echo Next steps:
+    echo   1. Run 'claude' to login to Claude Code
+    echo   2. Edit .env with your Discord bot token and settings
+    echo   3. Run 'npm run dev' to start the bot
+) else (
+    echo Next steps:
+    echo   1. Edit .env with your Discord bot token and settings
+    echo   2. Run 'npm run dev' to start the bot
+)
+echo.
+echo See SETUP.md for detailed instructions.
+echo.
+pause

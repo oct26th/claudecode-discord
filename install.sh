@@ -1,0 +1,107 @@
+#!/bin/bash
+set -e
+
+echo "==================================="
+echo " Claude Code Discord Bot Installer"
+echo "==================================="
+echo ""
+
+NEED_RESTART=false
+
+# --- 1. Node.js ---
+echo "[1/4] Checking Node.js..."
+if command -v node &>/dev/null; then
+  NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
+  echo "  Found Node.js $(node -v)"
+  if [ "$NODE_VER" -lt 20 ]; then
+    echo "  ⚠ Node.js 20+ required (current: v$NODE_VER)"
+    echo "  Upgrading..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      if command -v brew &>/dev/null; then
+        brew install node
+      else
+        echo "  ❌ Homebrew not found. Install from https://nodejs.org"
+        exit 1
+      fi
+    else
+      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+    fi
+    echo "  ✅ Node.js $(node -v) installed"
+  else
+    echo "  ✅ OK"
+  fi
+else
+  echo "  Node.js not found. Installing..."
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    if command -v brew &>/dev/null; then
+      brew install node
+    else
+      echo "  ❌ Homebrew not found."
+      echo "  Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+      echo "  Or download Node.js from https://nodejs.org"
+      exit 1
+    fi
+  else
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+  fi
+  echo "  ✅ Node.js $(node -v) installed"
+fi
+echo ""
+
+# --- 2. Claude Code CLI ---
+echo "[2/4] Checking Claude Code CLI..."
+if command -v claude &>/dev/null; then
+  echo "  Found Claude Code $(claude --version 2>/dev/null || echo '(version unknown)')"
+  echo "  ✅ OK"
+else
+  echo "  Claude Code not found. Installing..."
+  npm install -g @anthropic-ai/claude-code
+  echo "  ✅ Claude Code installed"
+  echo ""
+  echo "  ⚠ Claude Code login required!"
+  echo "  Run 'claude' once to complete OAuth login."
+  NEED_RESTART=true
+fi
+echo ""
+
+# --- 3. npm install ---
+echo "[3/4] Installing project dependencies..."
+npm install
+echo "  ✅ Done"
+echo ""
+
+# --- 4. .env ---
+echo "[4/4] Checking .env file..."
+if [ -f .env ]; then
+  echo "  .env already exists"
+  echo "  ✅ OK"
+else
+  if [ -f .env.example ]; then
+    cp .env.example .env
+    echo "  Created .env from .env.example"
+    echo "  ⚠ Edit .env and fill in your values before running!"
+  else
+    echo "  ⚠ .env.example not found, skipping"
+  fi
+fi
+echo ""
+
+# --- Done ---
+echo "==================================="
+echo " Installation complete!"
+echo "==================================="
+echo ""
+if [ "$NEED_RESTART" = true ]; then
+  echo "⚠ Next steps:"
+  echo "  1. Run 'claude' to login to Claude Code"
+  echo "  2. Edit .env with your Discord bot token and settings"
+  echo "  3. Run 'npm run dev' to start the bot"
+else
+  echo "Next steps:"
+  echo "  1. Edit .env with your Discord bot token and settings"
+  echo "  2. Run 'npm run dev' to start the bot"
+fi
+echo ""
+echo "See SETUP.md for detailed instructions."

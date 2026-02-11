@@ -30,13 +30,55 @@
 ```bash
 git clone git@github.com:chadingTV/claudecode-discord.git
 cd claudecode-discord
+
+# 자동 설치 (Node.js, Claude Code CLI, npm 패키지 일괄 설치)
+./install.sh        # macOS / Linux
+install.bat         # Windows
+
+# 또는 수동 설치
 npm install
-cp .env.example .env   # 환경변수 설정 후
+cp .env.example .env
 npm run dev
 ```
 
-Discord 봇 생성, 환경변수 상세 설정, Windows(WSL) 환경 안내, Claude Code 설치 방법 등
+Discord 봇 생성, 환경변수 상세 설정, Windows 환경 안내, Claude Code 설치 방법 등
 전체 셋업 과정은 **[SETUP.md](SETUP.md)** 를 참고하세요.
+
+## 프로젝트 구조
+
+```
+claudecode-discord/
+├── install.sh              # macOS/Linux 자동 설치 스크립트
+├── install.bat             # Windows 자동 설치 스크립트
+├── .env.example            # 환경변수 템플릿
+├── src/
+│   ├── index.ts            # 엔트리포인트
+│   ├── bot/
+│   │   ├── client.ts       # Discord 봇 초기화 & 이벤트
+│   │   ├── commands/       # 슬래시 명령어
+│   │   │   ├── register.ts
+│   │   │   ├── unregister.ts
+│   │   │   ├── status.ts
+│   │   │   ├── stop.ts
+│   │   │   ├── auto-approve.ts
+│   │   │   └── sessions.ts
+│   │   └── handlers/       # 이벤트 핸들러
+│   │       ├── message.ts
+│   │       └── interaction.ts
+│   ├── claude/
+│   │   ├── session-manager.ts   # 세션 생명주기 관리
+│   │   └── output-formatter.ts  # Discord 출력 포맷
+│   ├── db/
+│   │   ├── database.ts     # SQLite 초기화 & 쿼리
+│   │   └── types.ts
+│   ├── security/
+│   │   └── guard.ts        # 인증, rate limit
+│   └── utils/
+│       └── config.ts       # 환경변수 검증 (zod)
+├── SETUP.md                # 상세 셋업 가이드
+├── package.json
+└── tsconfig.json
+```
 
 ## 사용법
 

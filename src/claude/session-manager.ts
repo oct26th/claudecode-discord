@@ -103,7 +103,7 @@ class SessionManager {
               TodoWrite: "Updating tasks",
             };
             const filePath = typeof input.file_path === "string"
-              ? ` \`${input.file_path.split("/").pop()}\``
+              ? ` \`${(input.file_path as string).split(/[\\/]/).pop()}\``
               : "";
             lastActivity = `${toolLabels[toolName] ?? `Using ${toolName}`}${filePath}`;
 
