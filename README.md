@@ -186,9 +186,10 @@ On macOS, you can run the bot as a background service with a menu bar status ind
 
 - First run without `.env` prompts interactive setup in terminal
 - Menu bar icon: 🟢 running / 🔴 stopped / ⚙️ setup needed
-- Menu bar provides: start/stop/restart, settings editor, log viewer
+- Menu bar provides: start/stop/restart, settings editor (with folder browser), log viewer
+- Settings includes setup guide link and folder picker for project directory
+- Version display and manual update from menu bar when updates available
 - Auto-restarts on crash, auto-starts on boot (via launchd)
-- Auto-updates from git on each start
 
 > **Note:** This feature is macOS-only (requires launchd and Swift).
 
@@ -205,8 +206,8 @@ On Linux, you can run the bot as a systemd user service with an optional system 
 
 - First run without `.env` prompts interactive setup
 - System tray icon: green (running) / red (stopped), with start/stop/settings menu
+- Version display and manual update from tray when updates available
 - Auto-restarts on crash, auto-starts on boot (via systemd)
-- Auto-updates from git on each start
 - Tray requires `pip3 install pystray Pillow` (auto-installed on first run)
 - Works without GUI (headless server) — tray is skipped automatically
 
@@ -224,9 +225,9 @@ win-start.bat --fg     &:: Foreground mode (for debugging)
 - First run without `.env` prompts interactive setup
 - Tray app compiled to `.exe` on first run (using built-in .NET csc.exe)
 - System tray: green (running) / red (stopped) / orange (setup needed)
-- Tray provides: start/stop/restart, settings editor (GUI form), log viewer
+- Tray provides: start/stop/restart, settings editor (GUI form with folder browser), log viewer
+- Version display and manual update from tray when updates available
 - Auto-starts on logon (via Task Scheduler)
-- Auto-updates from git on each start
 
 ## Development
 

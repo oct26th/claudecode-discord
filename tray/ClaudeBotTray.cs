@@ -9,9 +9,12 @@ class ClaudeBotTray : Form
 {
     private NotifyIcon trayIcon;
     private System.Windows.Forms.Timer refreshTimer;
+    private System.Windows.Forms.Timer updateCheckTimer;
     private string botDir;
     private string envPath;
     private string taskName = "ClaudeDiscordBot";
+    private string currentVersion = "unknown";
+    private bool updateAvailable = false;
 
     public ClaudeBotTray()
     {
@@ -23,6 +26,8 @@ class ClaudeBotTray : Form
         this.FormBorderStyle = FormBorderStyle.None;
         this.Opacity = 0;
 
+        currentVersion = GetVersion();
+
         trayIcon = new NotifyIcon();
         trayIcon.Visible = true;
         UpdateStatus();
@@ -32,6 +37,15 @@ class ClaudeBotTray : Form
         refreshTimer.Interval = 5000;
         refreshTimer.Tick += (s, e) => { UpdateStatus(); BuildMenu(); };
         refreshTimer.Start();
+
+        // Check for updates every 5 minutes
+        updateCheckTimer = new System.Windows.Forms.Timer();
+        updateCheckTimer.Interval = 300000;
+        updateCheckTimer.Tick += (s, e) => { CheckForUpdates(); BuildMenu(); };
+        updateCheckTimer.Start();
+
+        // Initial update check
+        CheckForUpdates();
 
         // .env 없으면 설정 창 열기
         if (!File.Exists(envPath))
@@ -79,6 +93,80 @@ class ClaudeBotTray : Form
             return output;
         }
         catch { return null; }
+    }
+
+    private string GetVersion()
+    {
+        try
+        {
+            return RunCmdOutput("git", $"-C \"{botDir}\" describe --tags --always").Trim();
+        }
+        catch { return "unknown"; }
+    }
+
+    private void CheckForUpdates()
+    {
+        try
+        {
+            RunCmdOutput("git", $"-C \"{botDir}\" fetch origin main");
+            string local = RunCmdOutput("git", $"-C \"{botDir}\" rev-parse HEAD").Trim();
+            string remote = RunCmdOutput("git", $"-C \"{botDir}\" rev-parse origin/main").Trim();
+            updateAvailable = !string.IsNullOrEmpty(local) && !string.IsNullOrEmpty(remote) && local != remote;
+        }
+        catch { updateAvailable = false; }
+    }
+
+    private void PerformUpdate(object sender, EventArgs e)
+    {
+        var result = MessageBox.Show(
+            "Do you want to update to the latest version? The bot will restart after updating.",
+            "Update Available",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (result != DialogResult.Yes) return;
+
+        bool wasRunning = IsRunning();
+        if (wasRunning)
+        {
+            RunCmd($"\"{Path.Combine(botDir, "win-start.bat")}\" --stop", true);
+            Thread.Sleep(2000);
+        }
+
+        RunCmdOutput("git", $"-C \"{botDir}\" pull origin main");
+        RunCmd($"cd /d \"{botDir}\" && npm install --production && npm run build", true);
+
+        currentVersion = GetVersion();
+        updateAvailable = false;
+
+        if (wasRunning)
+        {
+            RunCmd($"\"{Path.Combine(botDir, "win-start.bat")}\"", false);
+            Thread.Sleep(2000);
+        }
+
+        MessageBox.Show($"Updated to version: {currentVersion}", "Update Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        UpdateStatus();
+        BuildMenu();
+    }
+
+    private string RunCmdOutput(string fileName, string arguments)
+    {
+        try
+        {
+            var proc = new Process();
+            proc.StartInfo.FileName = fileName;
+            proc.StartInfo.Arguments = arguments;
+            proc.StartInfo.UseShellExecute = false;
+            proc.StartInfo.RedirectStandardOutput = true;
+            proc.StartInfo.CreateNoWindow = true;
+            proc.StartInfo.WorkingDirectory = botDir;
+            proc.Start();
+            string output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit();
+            return output;
+        }
+        catch { return ""; }
     }
 
     private Bitmap CreateIcon(Color color)
@@ -151,6 +239,16 @@ class ClaudeBotTray : Form
         }
 
         menu.Items.Add(new ToolStripSeparator());
+
+        var versionItem = new ToolStripMenuItem($"Version: {currentVersion}") { Enabled = false };
+        menu.Items.Add(versionItem);
+
+        if (updateAvailable)
+        {
+            menu.Items.Add("⬆️ Update Available", null, PerformUpdate);
+        }
+
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, QuitAll);
 
         trayIcon.ContextMenuStrip = menu;
@@ -202,12 +300,17 @@ class ClaudeBotTray : Form
         {
             Text = "Claude Discord Bot Settings",
             Width = 500,
-            Height = 400,
+            Height = 430,
             StartPosition = FormStartPosition.CenterScreen,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
             MinimizeBox = false,
         };
+
+        // Setup guide link
+        var linkLabel = new LinkLabel() { Text = "📖 Open Setup Guide", Left = 15, Top = 10, Width = 450 };
+        linkLabel.LinkClicked += (s, ev) => { Process.Start("https://github.com/chadingTV/claudecode-discord/blob/main/SETUP.md"); };
+        form.Controls.Add(linkLabel);
 
         string[][] fields = new string[][] {
             new string[] { "DISCORD_BOT_TOKEN", "Discord Bot Token" },
@@ -221,7 +324,7 @@ class ClaudeBotTray : Form
         string[] defaults = new string[] { "", "", "", botDir, "10", "true" };
 
         var textBoxes = new TextBox[fields.Length];
-        int y = 15;
+        int y = 35;
 
         for (int i = 0; i < fields.Length; i++)
         {
@@ -229,21 +332,49 @@ class ClaudeBotTray : Form
             form.Controls.Add(label);
             y += 20;
 
-            var tb = new TextBox() { Left = 15, Top = y, Width = 450 };
-            string val = "";
-            env.TryGetValue(fields[i][0], out val);
-
-            if (fields[i][0] == "DISCORD_BOT_TOKEN" && val != null && val.Length > 10)
+            if (fields[i][0] == "BASE_PROJECT_DIR")
             {
-                tb.PlaceholderText = "••••" + val.Substring(val.Length - 6) + " (enter full token to change)";
+                var tb = new TextBox() { Left = 15, Top = y, Width = 360 };
+                string val = "";
+                env.TryGetValue(fields[i][0], out val);
+                tb.Text = (val != null && val != "") ? val : defaults[i];
+                form.Controls.Add(tb);
+                textBoxes[i] = tb;
+
+                var browseBtn = new Button() { Text = "Browse...", Left = 380, Top = y - 1, Width = 85 };
+                int idx = i;
+                browseBtn.Click += (s, ev) =>
+                {
+                    using (var fbd = new FolderBrowserDialog())
+                    {
+                        fbd.Description = "Select Base Project Directory";
+                        if (textBoxes[idx].Text != "") fbd.SelectedPath = textBoxes[idx].Text;
+                        if (fbd.ShowDialog() == DialogResult.OK)
+                        {
+                            textBoxes[idx].Text = fbd.SelectedPath;
+                        }
+                    }
+                };
+                form.Controls.Add(browseBtn);
             }
             else
             {
-                tb.Text = (val != null && val != "") ? val : defaults[i];
-            }
+                var tb = new TextBox() { Left = 15, Top = y, Width = 450 };
+                string val = "";
+                env.TryGetValue(fields[i][0], out val);
 
-            form.Controls.Add(tb);
-            textBoxes[i] = tb;
+                if (fields[i][0] == "DISCORD_BOT_TOKEN" && val != null && val.Length > 10)
+                {
+                    tb.PlaceholderText = "••••" + val.Substring(val.Length - 6) + " (enter full token to change)";
+                }
+                else
+                {
+                    tb.Text = (val != null && val != "") ? val : defaults[i];
+                }
+
+                form.Controls.Add(tb);
+                textBoxes[i] = tb;
+            }
             y += 30;
         }
 

@@ -96,19 +96,17 @@ if [ "$1" = "--fg" ]; then
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
     cd "$SCRIPT_DIR"
 
+    VERSION=$(git describe --tags --always 2>/dev/null || echo "unknown")
+    echo "[claude-bot] 현재 버전: $VERSION"
     echo "[claude-bot] Git 업데이트 확인 중..."
     git fetch origin main 2>/dev/null
     LOCAL=$(git rev-parse HEAD 2>/dev/null)
     REMOTE=$(git rev-parse origin/main 2>/dev/null)
 
     if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
-        echo "[claude-bot] 업데이트 발견! 자동 업데이트 중..."
-        git pull origin main
-        npm install --production
-        npm run build
-        echo "[claude-bot] 업데이트 완료 ($(git log --oneline -1))"
+        echo "[claude-bot] 업데이트가 있습니다 (메뉴바/트레이에서 업데이트 가능)"
     else
-        echo "[claude-bot] 최신 버전"
+        echo "[claude-bot] 최신 버전입니다"
     fi
 
     if [ ! -d "dist" ]; then

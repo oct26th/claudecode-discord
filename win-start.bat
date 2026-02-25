@@ -111,6 +111,9 @@ if "%~1"=="--status" (
 if "%~1"=="--fg" (
     cd /d "%SCRIPT_DIR%"
 
+    for /f %%i in ('git describe --tags --always 2^>nul') do set "VERSION=%%i"
+    if "!VERSION!"=="" set "VERSION=unknown"
+    echo [claude-bot] 현재 버전: !VERSION!
     echo [claude-bot] Git 업데이트 확인 중...
     git fetch origin main >nul 2>&1
 
@@ -120,15 +123,11 @@ if "%~1"=="--fg" (
     if not "!LOCAL!"=="!REMOTE!" (
         if not "!LOCAL!"=="" (
             if not "!REMOTE!"=="" (
-                echo [claude-bot] 업데이트 발견! 자동 업데이트 중...
-                git pull origin main
-                call npm install --production
-                call npm run build
-                echo [claude-bot] 업데이트 완료
+                echo [claude-bot] 업데이트가 있습니다 (트레이에서 업데이트 가능^)
             )
         )
     ) else (
-        echo [claude-bot] 최신 버전
+        echo [claude-bot] 최신 버전입니다
     )
 
     if not exist "dist" (
@@ -154,7 +153,7 @@ if not errorlevel 1 (
     timeout /t 2 /nobreak >nul
 )
 
-:: 업데이트 체크
+:: 업데이트 체크 (자동 업데이트 안 함, 트레이에서 수동)
 echo [claude-bot] Git 업데이트 확인 중...
 git fetch origin main >nul 2>&1
 for /f %%i in ('git rev-parse HEAD 2^>nul') do set "LOCAL=%%i"
@@ -163,14 +162,11 @@ for /f %%i in ('git rev-parse origin/main 2^>nul') do set "REMOTE=%%i"
 if not "!LOCAL!"=="!REMOTE!" (
     if not "!LOCAL!"=="" (
         if not "!REMOTE!"=="" (
-            echo [claude-bot] 업데이트 발견! 자동 업데이트 중...
-            git pull origin main
-            call npm install --production
-            call npm run build
+            echo [claude-bot] 업데이트가 있습니다 (트레이에서 업데이트 가능^)
         )
     )
 ) else (
-    echo [claude-bot] 최신 버전
+    echo [claude-bot] 최신 버전입니다
 )
 
 if not exist "dist" (

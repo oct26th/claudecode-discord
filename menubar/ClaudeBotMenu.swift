@@ -1,4 +1,5 @@
 import Cocoa
+import ObjectiveC
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -7,6 +8,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var botDir: String
     private var plistDst: String
     private var envPath: String
+    private var currentVersion: String = "unknown"
+    private var updateAvailable: Bool = false
 
     override init() {
         let scriptDir = (CommandLine.arguments[0] as NSString).deletingLastPathComponent
@@ -18,11 +21,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        currentVersion = getVersion()
+        checkForUpdates()
         updateStatus()
         buildMenu()
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.updateStatus()
             self?.buildMenu()
+        }
+        // Check for updates every 5 minutes
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            self?.checkForUpdates()
         }
 
         // .env 없으면 자동으로 설정 창 열기
@@ -30,6 +39,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.openSettings()
             }
+        }
+    }
+
+    private func getVersion() -> String {
+        let output = runShell("cd '\(botDir)' && git describe --tags --always 2>/dev/null")
+        let ver = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ver.isEmpty ? "unknown" : ver
+    }
+
+    private func checkForUpdates() {
+        DispatchQueue.global(qos: .background).async {
+            self.runShell("cd '\(self.botDir)' && git fetch origin main 2>/dev/null")
+            let local = self.runShell("cd '\(self.botDir)' && git rev-parse HEAD 2>/dev/null").trimmingCharacters(in: .whitespacesAndNewlines)
+            let remote = self.runShell("cd '\(self.botDir)' && git rev-parse origin/main 2>/dev/null").trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasUpdate = !local.isEmpty && !remote.isEmpty && local != remote
+            DispatchQueue.main.async {
+                self.updateAvailable = hasUpdate
+                self.buildMenu()
+            }
+        }
+    }
+
+    @objc private func performUpdate() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Update Available"
+        alert.informativeText = "Do you want to update to the latest version? The bot will restart after updating."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Update")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let wasRunning = isRunning()
+            if wasRunning {
+                runShell("launchctl unload '\(plistDst)' 2>/dev/null")
+            }
+
+            let output = runShell("cd '\(botDir)' && git pull origin main && npm install --production && npm run build 2>&1")
+
+            currentVersion = getVersion()
+            updateAvailable = false
+
+            if wasRunning {
+                let plistSrc = "\(botDir)/com.claude-discord.plist"
+                runShell("cp '\(plistSrc)' '\(plistDst)' && launchctl load '\(plistDst)'")
+            }
+
+            let doneAlert = NSAlert()
+            doneAlert.messageText = "Update Complete"
+            doneAlert.informativeText = "Updated to version: \(currentVersion)\n\n\(output)"
+            doneAlert.alertStyle = .informational
+            doneAlert.runModal()
+
+            updateStatus()
+            buildMenu()
         }
     }
 
@@ -110,6 +174,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Version & update
+        let versionItem = NSMenuItem(title: "Version: \(currentVersion)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+
+        if updateAvailable {
+            let updateItem = NSMenuItem(title: "⬆️ Update Available", action: #selector(performUpdate), keyEquivalent: "u")
+            updateItem.target = self
+            menu.addItem(updateItem)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitAll), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -140,7 +217,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let alert = NSAlert()
         alert.messageText = "Claude Discord Bot Settings"
-        alert.informativeText = "Please fill in the required fields."
+        alert.informativeText = "Please fill in the required fields.\nSetup guide: https://github.com/chadingTV/claudecode-discord/blob/main/SETUP.md"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
@@ -149,6 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let fieldHeight: CGFloat = 24
         let labelHeight: CGFloat = 18
         let spacing: CGFloat = 8
+        let browseButtonWidth: CGFloat = 80
         let fields: [(label: String, key: String, placeholder: String, defaultValue: String)] = [
             ("Discord Bot Token:", "DISCORD_BOT_TOKEN", "Enter bot token", ""),
             ("Discord Guild ID:", "DISCORD_GUILD_ID", "Enter server ID", ""),
@@ -158,11 +236,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ("Show Cost (true/false):", "SHOW_COST", "false recommended for Max plan", "true"),
         ]
 
-        let totalHeight = CGFloat(fields.count) * (labelHeight + fieldHeight + spacing) + 4
+        // Setup guide link + fields height
+        let linkHeight: CGFloat = 20
+        let totalHeight = linkHeight + spacing + CGFloat(fields.count) * (labelHeight + fieldHeight + spacing) + 4
         let accessory = NSView(frame: NSRect(x: 0, y: 0, width: width, height: totalHeight))
 
         var textFields: [String: NSTextField] = [:]
         var y = totalHeight
+
+        // Clickable setup guide link
+        y -= linkHeight
+        let linkButton = NSButton(frame: NSRect(x: 0, y: y, width: width, height: linkHeight))
+        linkButton.title = "📖 Open Setup Guide"
+        linkButton.bezelStyle = .inline
+        linkButton.isBordered = false
+        linkButton.font = NSFont.systemFont(ofSize: 12)
+        linkButton.contentTintColor = .linkColor
+        linkButton.target = self
+        linkButton.action = #selector(openSetupGuide)
+        accessory.addSubview(linkButton)
+        y -= spacing
 
         for field in fields {
             y -= labelHeight
@@ -172,19 +265,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             accessory.addSubview(label)
 
             y -= fieldHeight
-            let input = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: fieldHeight))
-            input.placeholderString = field.placeholder
-            input.stringValue = env[field.key] ?? field.defaultValue
-            if field.key == "DISCORD_BOT_TOKEN" {
-                // 토큰은 보안상 일부만 표시
-                let val = env[field.key] ?? ""
-                if val.count > 10 {
-                    input.placeholderString = "••••" + String(val.suffix(6)) + " (enter full token to change)"
-                    input.stringValue = ""
+            if field.key == "BASE_PROJECT_DIR" {
+                // Text field + Browse button
+                let input = NSTextField(frame: NSRect(x: 0, y: y, width: width - browseButtonWidth - 4, height: fieldHeight))
+                input.placeholderString = field.placeholder
+                input.stringValue = env[field.key] ?? field.defaultValue
+                accessory.addSubview(input)
+                textFields[field.key] = input
+
+                let browseBtn = NSButton(frame: NSRect(x: width - browseButtonWidth, y: y, width: browseButtonWidth, height: fieldHeight))
+                browseBtn.title = "Browse..."
+                browseBtn.bezelStyle = .rounded
+                browseBtn.target = self
+                browseBtn.action = #selector(browseFolderClicked(_:))
+                browseBtn.tag = Int(input.hash)
+                accessory.addSubview(browseBtn)
+                // Store reference for browse callback
+                objc_setAssociatedObject(browseBtn, "targetField", input, .OBJC_ASSOCIATION_RETAIN)
+            } else {
+                let input = NSTextField(frame: NSRect(x: 0, y: y, width: width, height: fieldHeight))
+                input.placeholderString = field.placeholder
+                input.stringValue = env[field.key] ?? field.defaultValue
+                if field.key == "DISCORD_BOT_TOKEN" {
+                    let val = env[field.key] ?? ""
+                    if val.count > 10 {
+                        input.placeholderString = "••••" + String(val.suffix(6)) + " (enter full token to change)"
+                        input.stringValue = ""
+                    }
                 }
+                accessory.addSubview(input)
+                textFields[field.key] = input
             }
-            accessory.addSubview(input)
-            textFields[field.key] = input
 
             y -= spacing
         }
@@ -231,6 +342,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             updateStatus()
             buildMenu()
+        }
+    }
+
+    @objc private func openSetupGuide() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/chadingTV/claudecode-discord/blob/main/SETUP.md")!)
+    }
+
+    @objc private func browseFolderClicked(_ sender: NSButton) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+        panel.message = "Select Base Project Directory"
+        if panel.runModal() == .OK, let url = panel.url {
+            if let field = objc_getAssociatedObject(sender, "targetField") as? NSTextField {
+                field.stringValue = url.path
+            }
         }
     }
 
