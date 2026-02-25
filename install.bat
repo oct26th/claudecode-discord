@@ -17,8 +17,8 @@ if %errorlevel% neq 0 (
     where winget >nul 2>&1
     if %errorlevel% equ 0 (
         winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
-        echo   ! Node.js installed. Please restart this script in a new terminal.
-        pause
+        echo   Node.js installed. Restarting in new terminal...
+        start cmd /c "cd /d "%SCRIPT_DIR%" && install.bat"
         exit /b 0
     )
     echo   winget not available. Downloading Node.js installer...
@@ -28,16 +28,9 @@ if %errorlevel% neq 0 (
         echo   Installing Node.js (this may take a moment^)...
         msiexec /i "!NODE_MSI!" /passive /norestart
         del "!NODE_MSI!" >nul 2>&1
-        :: Add Node.js and npm global to current session PATH
-        set "PATH=%PATH%;C:\Program Files\nodejs;%APPDATA%\npm"
-        where node >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo   OK Node.js installed successfully
-        ) else (
-            echo   ! Node.js installed. Please restart this script in a new terminal.
-            pause
-            exit /b 0
-        )
+        echo   Node.js installed. Restarting in new terminal...
+        start cmd /c "cd /d "%SCRIPT_DIR%" && install.bat"
+        exit /b 0
     ) else (
         echo   X Download failed.
         echo   Download Node.js manually from https://nodejs.org
@@ -55,8 +48,8 @@ if %NODE_MAJOR% lss 20 (
     where winget >nul 2>&1
     if %errorlevel% equ 0 (
         winget upgrade OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
-        echo   ! Updated. Please restart this script in a new terminal.
-        pause
+        echo   Node.js upgraded. Restarting in new terminal...
+        start cmd /c "cd /d "%SCRIPT_DIR%" && install.bat"
         exit /b 0
     )
     echo   winget not available. Downloading Node.js installer...
@@ -66,8 +59,9 @@ if %NODE_MAJOR% lss 20 (
         echo   Upgrading Node.js (this may take a moment^)...
         msiexec /i "!NODE_MSI!" /passive /norestart
         del "!NODE_MSI!" >nul 2>&1
-        set "PATH=%PATH%;C:\Program Files\nodejs"
-        echo   OK Node.js upgraded
+        echo   Node.js upgraded. Restarting in new terminal...
+        start cmd /c "cd /d "%SCRIPT_DIR%" && install.bat"
+        exit /b 0
     ) else (
         echo   X Download failed. Download from https://nodejs.org
         pause
