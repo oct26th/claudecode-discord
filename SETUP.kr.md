@@ -1,6 +1,8 @@
-# 셋업 가이드
+# macOS / Linux 셋업 가이드
 
-Discord에서 Claude Code 세션을 관리하는 봇을 설치하고 실행하는 전체 과정입니다.
+macOS와 Linux에서 Claude Code Discord Bot을 설치하고 실행하는 전체 과정입니다.
+
+> **[English version](SETUP.md)** | **[Windows 셋업](SETUP-WINDOWS.kr.md)**
 
 ---
 
@@ -16,12 +18,7 @@ git clone https://github.com/chadingTV/claudecode-discord.git
 git clone git@github.com:chadingTV/claudecode-discord.git
 
 cd claudecode-discord
-
-# macOS / Linux
 ./install.sh
-
-# Windows (cmd 또는 PowerShell)
-./install.bat
 ```
 
 스크립트가 완료되면 `.env` 파일을 편집한 후 `npm run dev`로 실행하면 됩니다.
@@ -42,12 +39,11 @@ node -v   # v20.x.x 이상이면 OK
 설치되어 있지 않다면:
 
 - **macOS**: `brew install node` 또는 [nodejs.org](https://nodejs.org)에서 다운로드
-- **Linux/WSL**:
+- **Linux**:
   ```bash
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   sudo apt-get install -y nodejs
   ```
-- **Windows**: 아래 Windows 섹션 참고 또는 `winget install OpenJS.NodeJS.LTS`
 
 ### Claude Code 설치
 
@@ -71,77 +67,13 @@ claude
 # 로그인 완료 후 터미널에서 사용 가능
 ```
 
-> **⚠️ 중요: 봇을 실행하기 전에 반드시 터미널에서 `claude` 명령어를 한 번 실행하여 로그인하세요.**
+> **중요: 봇을 실행하기 전에 반드시 터미널에서 `claude` 명령어를 한 번 실행하여 로그인하세요.**
 > 로그인하지 않은 상태에서 봇을 실행하면 Claude Code 세션이 생성되지 않습니다.
 > 로그인 상태 확인: `claude` 실행 시 바로 대화가 시작되면 로그인된 상태입니다.
 
 > Claude Code는 Anthropic API 키가 아닌 **OAuth 인증**으로 동작합니다.
 > 별도의 `ANTHROPIC_API_KEY` 환경변수는 필요 없습니다.
 > (Max 플랜 사용자는 그대로, API 키 사용자는 `ANTHROPIC_API_KEY` 환경변수 설정 필요)
-
----
-
-## 0-W. Windows 사용자 추가 안내
-
-Windows에서는 **네이티브** 또는 **WSL** 두 가지 방식으로 사용할 수 있습니다.
-
-### 방법 A: Windows 네이티브
-
-`install.bat`을 실행하면 `winget`으로 Node.js를 설치하고 나머지를 자동 처리합니다.
-`better-sqlite3` 설치 실패 시 Visual Studio Build Tools가 필요합니다:
-```powershell
-winget install Microsoft.VisualStudio.2022.BuildTools
-```
-설치 후 "Desktop development with C++" 워크로드를 선택하세요.
-
-### 방법 B: WSL (권장)
-
-WSL을 사용하면 macOS/Linux와 동일한 환경에서 실행할 수 있습니다.
-
-### WSL 설치
-
-PowerShell을 **관리자 권한**으로 실행 후:
-
-```powershell
-wsl --install
-```
-
-설치 완료 후 재부팅 → Ubuntu가 자동 설치됩니다.
-시작 메뉴에서 **Ubuntu**를 열면 리눅스 터미널이 실행됩니다.
-
-### WSL 안에서 Node.js 설치
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v   # v22.x.x 확인
-```
-
-### WSL 안에서 Claude Code 설치
-
-```bash
-npm install -g @anthropic-ai/claude-code
-claude   # 최초 로그인
-```
-
-### WSL 안에서 Git 설정
-
-```bash
-sudo apt-get install -y git
-git config --global user.name "Your Name"
-git config --global user.email "your@email.com"
-```
-
-### 주의사항
-
-- WSL에서의 프로젝트 경로는 `/home/username/projects/...` 형태입니다
-- Windows 파일시스템(`/mnt/c/...`)도 접근 가능하지만 성능이 떨어지므로, WSL 내부 경로 사용을 권장합니다
-- VSCode 사용 시 **Remote - WSL** 확장 설치 후 WSL 안에서 `code .`으로 열 수 있습니다
-
-> **⚠️ 세션 공유 주의:** VSCode를 Windows 네이티브로 사용하는 경우(대부분의 경우), 봇도 **Windows 네이티브**(방법 A)로 실행해야 합니다.
-> WSL에서 봇을 실행하면 프로젝트 경로가 `/home/...`이 되어 VSCode의 `C:\Users\...` 경로와 달라지므로, VSCode에서 만든 Claude Code 세션을 Discord에서 이어갈 수 없습니다.
-
-> 이후 모든 단계는 WSL 터미널(Ubuntu) 안에서 진행하면 macOS와 동일합니다.
 
 ---
 
@@ -243,19 +175,39 @@ SHOW_COST=true
 
 ## 6. 실행
 
+### macOS (백그라운드 + 메뉴바)
+
 ```bash
-# 개발 모드 (hot reload)
-npm run dev
-
-# 또는 프로덕션 빌드 후 실행
-npm run build
-npm start
+./mac-start.sh          # 시작 (백그라운드 + 메뉴바 아이콘)
+./mac-start.sh --stop   # 중지
+./mac-start.sh --status # 상태 확인
+./mac-start.sh --fg     # 포그라운드 모드 (디버깅용)
 ```
 
-정상 실행 시 콘솔에 표시:
+- 메뉴바 아이콘: 🟢 실행 중 / 🔴 중지됨 / ⚙️ 설정 필요
+- 메뉴바에서: 시작/중지/재시작, 설정 편집 (폴더 선택기 포함), 로그 보기
+- 크래시 시 자동 재시작, 부팅 시 자동 실행 (launchd)
+
+### Linux (백그라운드 + 시스템 트레이)
+
+```bash
+./linux-start.sh          # 시작 (systemd + 트레이 아이콘)
+./linux-start.sh --stop   # 중지
+./linux-start.sh --status # 상태 확인
+./linux-start.sh --fg     # 포그라운드 모드 (디버깅용)
 ```
-Bot logged in as MyClaudeCode#1234
-Registered 8 slash commands
+
+- 시스템 트레이: 초록(실행 중) / 빨강(중지됨), 시작/중지/설정 메뉴
+- 크래시 시 자동 재시작, 부팅 시 자동 실행 (systemd)
+- 트레이는 `pip3 install pystray Pillow` 필요 (첫 실행 시 자동 설치)
+- GUI 없는 서버에서도 동작 (트레이만 생략)
+
+### 개발 모드
+
+```bash
+npm run dev          # 개발 실행 (tsx로 hot reload)
+npm run build        # 프로덕션 빌드
+npm start            # 빌드된 파일 실행
 ```
 
 ---
@@ -278,21 +230,16 @@ Discord에서 원하는 채널로 이동 후:
 | 절대 경로 | `/Users/you/other/project` | `/Users/you/other/project` (그대로 사용) |
 
 > **팁:** 터미널에서 프로젝트 디렉토리로 이동 후 `pwd` 명령어를 실행하면 절대 경로를 확인할 수 있습니다.
-> 절대 경로를 입력하면 `BASE_PROJECT_DIR` 설정과 관계없이 해당 경로가 그대로 사용됩니다.
 
 ### Claude에게 메시지 보내기
 
-등록된 채널에서 일반 메시지를 보내면 Claude Code가 응답합니다:
-```
-이 프로젝트의 구조를 설명해줘
-```
-
+등록된 채널에서 일반 메시지를 보내면 Claude Code가 응답합니다.
 이미지, 문서, 코드 파일 등을 첨부하면 Claude가 읽고 분석할 수 있습니다.
 
 ### 진행 중 제어
 
 - 작업 진행 중 메시지에 표시되는 **⏹️ Stop** 버튼으로 즉시 중지
-- 작업 진행 중 새 메시지를 보내면 "이전 작업이 진행 중입니다" 안내
+- 이전 작업 진행 중 새 메시지를 보내면 "이전 작업이 진행 중입니다" 안내
 - `/stop` 슬래시 명령어로도 중지 가능
 
 ### 도구 승인

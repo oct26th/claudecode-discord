@@ -1,8 +1,8 @@
-# Setup Guide
+# macOS / Linux Setup Guide
 
-Complete guide for installing and running the Discord bot that manages Claude Code sessions.
+Complete guide for installing and running the Claude Code Discord Bot on macOS and Linux.
 
-> **[Korean version (한국어)](SETUP.kr.md)**
+> **[Korean version (한국어)](SETUP.kr.md)** | **[Windows Setup](SETUP-WINDOWS.md)**
 
 ---
 
@@ -18,12 +18,7 @@ git clone https://github.com/chadingTV/claudecode-discord.git
 git clone git@github.com:chadingTV/claudecode-discord.git
 
 cd claudecode-discord
-
-# macOS / Linux
 ./install.sh
-
-# Windows (cmd or PowerShell)
-./install.bat
 ```
 
 Once the script completes, edit the `.env` file and run `npm run dev`.
@@ -44,12 +39,11 @@ node -v   # v20.x.x or higher
 If not installed:
 
 - **macOS**: `brew install node` or download from [nodejs.org](https://nodejs.org)
-- **Linux/WSL**:
+- **Linux**:
   ```bash
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   sudo apt-get install -y nodejs
   ```
-- **Windows**: See Windows section below or `winget install OpenJS.NodeJS.LTS`
 
 ### Claude Code
 
@@ -73,77 +67,13 @@ claude
 # After login, CLI is ready to use
 ```
 
-> **⚠️ Important: You MUST run `claude` in the terminal and log in before starting the bot.**
+> **Important: You MUST run `claude` in the terminal and log in before starting the bot.**
 > The bot cannot create Claude Code sessions if you haven't logged in first.
 > To verify: run `claude` — if it starts a conversation immediately, you're logged in.
 
 > Claude Code uses **OAuth authentication**, not an API key.
 > No `ANTHROPIC_API_KEY` environment variable is needed.
 > (Max plan users: use as-is. API key users: set `ANTHROPIC_API_KEY` env var)
-
----
-
-## 0-W. Windows Users
-
-Windows supports both **native** and **WSL** modes.
-
-### Option A: Windows Native
-
-Running `install.bat` installs Node.js via `winget` and handles the rest automatically.
-If `better-sqlite3` installation fails, Visual Studio Build Tools are required:
-```powershell
-winget install Microsoft.VisualStudio.2022.BuildTools
-```
-Select the "Desktop development with C++" workload after installation.
-
-### Option B: WSL (Recommended)
-
-WSL provides the same environment as macOS/Linux.
-
-### Installing WSL
-
-Run PowerShell as **Administrator**:
-
-```powershell
-wsl --install
-```
-
-Reboot after installation. Ubuntu will be installed automatically.
-Open **Ubuntu** from the Start menu to get a Linux terminal.
-
-### Node.js in WSL
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v   # Verify v22.x.x
-```
-
-### Claude Code in WSL
-
-```bash
-npm install -g @anthropic-ai/claude-code
-claude   # First-time login
-```
-
-### Git in WSL
-
-```bash
-sudo apt-get install -y git
-git config --global user.name "Your Name"
-git config --global user.email "your@email.com"
-```
-
-### Notes
-
-- Project paths in WSL use `/home/username/projects/...` format
-- Windows filesystem (`/mnt/c/...`) is accessible but slower; use WSL internal paths
-- For VSCode, install **Remote - WSL** extension, then run `code .` from WSL
-
-> **⚠️ Session sharing note:** If you use VSCode natively on Windows (most users do), you must run the bot on **Windows Native** (Option A) as well.
-> Running the bot in WSL gives project paths like `/home/...`, which won't match VSCode's `C:\Users\...` paths — so Claude Code sessions from VSCode cannot be resumed from Discord.
-
-> All subsequent steps in WSL are identical to macOS.
 
 ---
 
@@ -245,19 +175,39 @@ Example: If `BASE_PROJECT_DIR=/Users/you/projects`, then `/register my-app` → 
 
 ## 6. Run
 
+### macOS (Background + Menu Bar)
+
 ```bash
-# Development mode (hot reload)
-npm run dev
-
-# Or production build
-npm run build
-npm start
+./mac-start.sh          # Start (background + menu bar icon)
+./mac-start.sh --stop   # Stop
+./mac-start.sh --status # Check status
+./mac-start.sh --fg     # Foreground mode (for debugging)
 ```
 
-On successful startup:
+- Menu bar icon: 🟢 running / 🔴 stopped / ⚙️ setup needed
+- Menu bar provides: start/stop/restart, settings editor (with folder browser), log viewer
+- Auto-restarts on crash, auto-starts on boot (via launchd)
+
+### Linux (Background + System Tray)
+
+```bash
+./linux-start.sh          # Start (systemd + tray icon if GUI available)
+./linux-start.sh --stop   # Stop
+./linux-start.sh --status # Check status
+./linux-start.sh --fg     # Foreground mode (for debugging)
 ```
-Bot logged in as MyClaudeCode#1234
-Registered 8 slash commands
+
+- System tray icon: green (running) / red (stopped), with start/stop/settings menu
+- Auto-restarts on crash, auto-starts on boot (via systemd)
+- Tray requires `pip3 install pystray Pillow` (auto-installed on first run)
+- Works without GUI (headless server) — tray is skipped automatically
+
+### Development Mode
+
+```bash
+npm run dev          # Dev mode (hot reload via tsx)
+npm run build        # Production build
+npm start            # Run built files
 ```
 
 ---
@@ -280,20 +230,15 @@ In Discord, go to the desired channel:
 | Absolute path | `/Users/you/other/project` | `/Users/you/other/project` (used as-is) |
 
 > **Tip:** Run `pwd` in your terminal inside the project directory to get the absolute path.
-> When using an absolute path, `BASE_PROJECT_DIR` is ignored and the path is used directly.
 
 ### Send Messages to Claude
 
-Send a regular message in a registered channel and Claude Code will respond:
-```
-Explain the structure of this project
-```
-
+Send a regular message in a registered channel and Claude Code will respond.
 Attach images, documents, or code files and Claude can read and analyze them.
 
 ### In-Progress Controls
 
-- **⏹️ Stop** button appears on progress messages for instant cancellation
+- **⏹️ Stop** button on progress messages for instant cancellation
 - Sending a new message while busy shows "previous task in progress" notice
 - `/stop` slash command also available
 

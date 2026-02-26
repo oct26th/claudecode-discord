@@ -64,23 +64,23 @@ Your Discord Server
 
 ```bash
 git clone https://github.com/chadingTV/claudecode-discord.git
-or
-git clone git@github.com:chadingTV/claudecode-discord.git
-
 cd claudecode-discord
 
-# Auto install (Node.js, Claude Code CLI, npm packages)
-./install.sh        # macOS / Linux
-install.bat         # Windows
+# macOS / Linux
+./install.sh
 
-# Or manual install
-npm install
-cp .env.example .env
-npm run dev
+# Windows
+install.bat
 ```
 
-For Discord bot creation, environment variables, Windows setup, and Claude Code installation,
-see the full setup guide at **[SETUP.md](SETUP.md)**.
+### Setup Guides
+
+| Platform | Guide |
+|----------|-------|
+| 🍎 **macOS / Linux** | **[SETUP.md](SETUP.md)** — terminal-based setup, menu bar / tray app |
+| 🪟 **Windows** | **[SETUP-WINDOWS.md](SETUP-WINDOWS.md)** — GUI installer, system tray app with control panel, desktop shortcut |
+
+Windows users: `install.bat` handles everything automatically — installs dependencies, builds, creates a desktop shortcut, and launches the bot with a system tray GUI.
 
 ## Project Structure
 
@@ -120,7 +120,8 @@ claudecode-discord/
 │   │   └── guard.ts        # Auth, rate limit
 │   └── utils/
 │       └── config.ts       # Env var validation (zod)
-├── SETUP.md                # Detailed setup guide
+├── SETUP.md                # macOS/Linux setup guide
+├── SETUP-WINDOWS.md        # Windows setup guide
 ├── package.json
 └── tsconfig.json
 ```
@@ -246,21 +247,24 @@ On Linux, you can run the bot as a systemd user service with an optional system 
 
 ## Windows Quick Start (Background + System Tray)
 
-On Windows, you can run the bot in the background with a system tray indicator (.exe).
+On Windows, `install.bat` sets up everything and creates a **desktop shortcut**. Double-click it to launch.
 
 ```batch
-win-start.bat          &:: Start (background + tray icon)
+win-start.bat          &:: Start (background + tray + control panel)
 win-start.bat --stop   &:: Stop
 win-start.bat --status &:: Check status
 win-start.bat --fg     &:: Foreground mode (for debugging)
 ```
 
-- First run without `.env` prompts interactive setup
-- Tray app compiled to `.exe` on first run (using built-in .NET csc.exe)
+- **Control Panel GUI**: left-click tray icon for start/stop/restart, settings, log viewer, auto-update
+- **EN / KR language toggle** with persistent preference
 - System tray: green (running) / red (stopped) / orange (setup needed)
-- Tray provides: start/stop/restart, settings editor (GUI form with folder browser), log viewer
-- Version display and manual update from tray when updates available
-- Auto-starts on logon (via Task Scheduler)
+- GUI Settings dialog (no manual `.env` editing needed)
+- One-click auto-update: pulls code, rebuilds, recompiles tray app
+- Auto-starts on logon (via Windows Registry)
+- Desktop shortcut created by `install.bat`
+
+> See **[SETUP-WINDOWS.md](SETUP-WINDOWS.md)** for the full Windows guide.
 
 ## Development
 
