@@ -650,17 +650,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Control Panel Actions
 
     @objc private func startBotFromPanel() {
-        controlPanel?.close()
         startBot()
     }
 
     @objc private func stopBotFromPanel() {
-        controlPanel?.close()
         stopBot()
     }
 
     @objc private func restartBotFromPanel() {
-        controlPanel?.close()
         restartBot()
     }
 
@@ -718,14 +715,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             (L("Base Project Directory:", "기본 프로젝트 디렉토리:"), "BASE_PROJECT_DIR",
              L("e.g. /Users/you/projects", "예: /Users/you/projects"), ""),
             (L("Rate Limit Per Minute:", "분당 요청 제한:"), "RATE_LIMIT_PER_MINUTE", "10", "10"),
-            (L("Show Cost (true/false):", "비용 표시 (true/false):"), "SHOW_COST",
-             L("false recommended for Max plan", "Max 요금제는 false 권장"), "true"),
         ]
 
-        // Setup guide link + fields height
+        // Setup guide link + fields height + Show Cost radio row
         let linkHeight: CGFloat = 20
         let noteHeight: CGFloat = 18
-        let totalHeight = linkHeight + spacing + CGFloat(fields.count) * (labelHeight + fieldHeight + spacing) + noteHeight + 4
+        let radioRowHeight: CGFloat = labelHeight + fieldHeight + spacing
+        let totalHeight = linkHeight + spacing + CGFloat(fields.count) * (labelHeight + fieldHeight + spacing) + radioRowHeight + noteHeight + 4
         let accessory = NSView(frame: NSRect(x: 0, y: 0, width: width, height: totalHeight))
 
         var textFields: [String: NSTextField] = [:]
@@ -794,6 +790,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             y -= spacing
         }
 
+        // Show Cost radio buttons
+        y -= labelHeight
+        let showCostLabel = NSTextField(labelWithString: L("Show Cost:", "비용 표시:"))
+        showCostLabel.frame = NSRect(x: 0, y: y, width: width, height: labelHeight)
+        showCostLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        accessory.addSubview(showCostLabel)
+
+        y -= fieldHeight
+        let showCostTrue = NSButton(radioButtonWithTitle: L("true (show cost)", "true (비용 표시)"), target: nil, action: nil)
+        showCostTrue.frame = NSRect(x: 0, y: y, width: width / 2, height: fieldHeight)
+        showCostTrue.font = NSFont.systemFont(ofSize: 12)
+        accessory.addSubview(showCostTrue)
+
+        let showCostFalse = NSButton(radioButtonWithTitle: L("false (Max plan)", "false (Max 요금제)"), target: nil, action: nil)
+        showCostFalse.frame = NSRect(x: width / 2, y: y, width: width / 2, height: fieldHeight)
+        showCostFalse.font = NSFont.systemFont(ofSize: 12)
+        accessory.addSubview(showCostFalse)
+
+        let currentShowCost = env["SHOW_COST"] ?? "true"
+        if currentShowCost.lowercased() == "false" {
+            showCostFalse.state = .on
+        } else {
+            showCostTrue.state = .on
+        }
+        y -= spacing
+
         // Note about Max plan
         y -= noteHeight
         let noteLabel = NSTextField(labelWithString: L(
@@ -820,6 +842,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     newEnv[field.key] = value
                 }
             }
+            newEnv["SHOW_COST"] = showCostTrue.state == .on ? "true" : "false"
 
             // 필수 체크
             if (newEnv["DISCORD_BOT_TOKEN"] ?? "").isEmpty ||
@@ -839,16 +862,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // .env 파일 쓰기
             var content = ""
             for field in fields {
-                if field.key == "SHOW_COST" {
-                    content += "# Show estimated API cost in task results (set false for Max plan users)\n"
-                }
                 content += "\(field.key)=\(newEnv[field.key] ?? "")\n"
             }
+            content += "# Show estimated API cost in task results (set false for Max plan users)\n"
+            content += "SHOW_COST=\(newEnv["SHOW_COST"] ?? "true")\n"
             try? content.write(toFile: envPath, atomically: true, encoding: .utf8)
 
             updateStatus()
             buildMenu()
             rebuildControlPanel()
+
+            // Auto-start bot if not running and env is configured
+            if !isRunning() && isEnvConfigured() {
+                startBot()
+            }
         }
     }
 
@@ -917,7 +944,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openLog() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: "\(botDir)/bot.log"))
+        let logPath = "\(botDir)/bot.log"
+        if !FileManager.default.fileExists(atPath: logPath) {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
     }
 
     @objc private func openFolder() {
