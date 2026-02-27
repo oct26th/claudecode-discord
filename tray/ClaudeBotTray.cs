@@ -443,6 +443,7 @@ class ClaudeBotTray : Form
                 try { File.Delete(vbs); } catch { }
                 UpdateStatus();
                 BuildMenu();
+                RebuildControlPanel();
                 trayIcon.BalloonTipTitle = L("Claude Discord Bot Started", "Claude Discord Bot 시작됨");
                 trayIcon.BalloonTipText = L("Bot is running. Click tray icon to manage.",
                                              "봇이 실행 중입니다. 트레이 아이콘을 클릭하여 관리하세요.");
@@ -456,6 +457,7 @@ class ClaudeBotTray : Form
                 try { File.Delete(vbs); } catch { }
                 UpdateStatus();
                 BuildMenu();
+                RebuildControlPanel();
             }
         };
         waitTimer.Start();
