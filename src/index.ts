@@ -46,6 +46,15 @@ async function main() {
   process.on("SIGINT", () => { releaseLock(); process.exit(0); });
   process.on("SIGTERM", () => { releaseLock(); process.exit(0); });
 
+  // Global error handlers — prevent silent hangs from unhandled errors
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled promise rejection:", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught exception:", error);
+    // Don't exit — let the bot keep running for non-fatal errors
+  });
+
   console.log("Starting Claude Code Discord Controller...");
 
   // Load and validate config

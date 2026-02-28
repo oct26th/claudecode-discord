@@ -113,8 +113,46 @@ export async function startBot(): Promise<Client> {
     }
   });
 
-  // Handle messages
-  client.on("messageCreate", handleMessage);
+  // Handle messages (wrapped with error handler to prevent silent hangs)
+  client.on("messageCreate", async (message) => {
+    try {
+      await handleMessage(message);
+    } catch (error) {
+      console.error("messageCreate error:", error);
+      try {
+        if (message.channel.isSendable()) {
+          await message.reply(L("An error occurred while processing your message.", "메시지를 처리하는 중 오류가 발생했습니다."));
+        }
+      } catch {
+        // ignore reply error
+      }
+    }
+  });
+
+  // Discord.js error handlers — prevent silent disconnects
+  client.on("error", (error) => {
+    console.error("Discord client error:", error);
+  });
+
+  client.on("warn", (warning) => {
+    console.warn("Discord warning:", warning);
+  });
+
+  client.on("shardDisconnect", (event, shardId) => {
+    console.warn(`Shard ${shardId} disconnected (code ${event.code}). Reconnecting...`);
+  });
+
+  client.on("shardReconnecting", (shardId) => {
+    console.log(`Shard ${shardId} reconnecting...`);
+  });
+
+  client.on("shardResume", (shardId, replayedEvents) => {
+    console.log(`Shard ${shardId} resumed (${replayedEvents} events replayed)`);
+  });
+
+  client.on("shardError", (error, shardId) => {
+    console.error(`Shard ${shardId} error:`, error);
+  });
 
   // Login with retry (network may not be ready on boot)
   await loginWithRetry(client, config.DISCORD_BOT_TOKEN);

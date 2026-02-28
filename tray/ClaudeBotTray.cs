@@ -27,6 +27,9 @@ class ClaudeBotTray : Form
     private bool updateAvailable = false;
     private bool lastPanelRunning = false;
     private bool botStarting = false;
+    private Color lastIconColor = Color.Empty;
+    private IntPtr lastHIcon = IntPtr.Zero;
+    private string lastStatusText = "";
 
     // Language support
     private string langPrefFile;
@@ -70,7 +73,7 @@ class ClaudeBotTray : Form
 
         refreshTimer = new System.Windows.Forms.Timer();
         refreshTimer.Interval = 5000;
-        refreshTimer.Tick += (s, e) => { try { UpdateStatus(); BuildMenu(); } catch { } };
+        refreshTimer.Tick += (s, e) => { try { if (UpdateStatus()) BuildMenu(); } catch { } };
         refreshTimer.Start();
 
         // Check for updates every 5 minutes
@@ -267,9 +270,10 @@ class ClaudeBotTray : Form
     {
         var bmp = new Bitmap(16, 16);
         using (var g = Graphics.FromImage(bmp))
+        using (var brush = new SolidBrush(color))
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            g.FillEllipse(new SolidBrush(color), 1, 1, 14, 14);
+            g.FillEllipse(brush, 1, 1, 14, 14);
         }
         return bmp;
     }
@@ -290,34 +294,57 @@ class ClaudeBotTray : Form
 
     private void SetTrayIcon(Color color)
     {
+        // Skip if color hasn't changed — avoid GDI+ handle accumulation
+        if (color == lastIconColor) return;
+        lastIconColor = color;
+
         var bmp = CreateIcon(color);
-        IntPtr hIcon = bmp.GetHicon();
-        var oldIcon = trayIcon.Icon;
-        trayIcon.Icon = Icon.FromHandle(hIcon);
-        if (oldIcon != null) { try { DestroyIcon(oldIcon.Handle); oldIcon.Dispose(); } catch { } }
+        IntPtr newHIcon = bmp.GetHicon();
         bmp.Dispose();
+
+        // Destroy previous native icon handle to prevent GDI+ leak
+        IntPtr oldHIcon = lastHIcon;
+        var oldIcon = trayIcon.Icon;
+
+        trayIcon.Icon = Icon.FromHandle(newHIcon);
+        lastHIcon = newHIcon;
+
+        // Dispose managed Icon wrapper, then destroy old native handle
+        if (oldIcon != null) { try { oldIcon.Dispose(); } catch { } }
+        if (oldHIcon != IntPtr.Zero) { try { DestroyIcon(oldHIcon); } catch { } }
     }
 
-    private void UpdateStatus()
+    /// <summary>
+    /// Updates tray icon and tooltip. Returns true if status actually changed.
+    /// </summary>
+    private bool UpdateStatus()
     {
         bool running = IsRunning();
         bool hasEnv = IsEnvConfigured();
 
+        Color color;
+        string text;
         if (!hasEnv)
         {
-            SetTrayIcon(Color.Orange);
-            trayIcon.Text = L("Claude Discord Bot: Setup Required", "Claude Discord Bot: 설정 필요");
+            color = Color.Orange;
+            text = L("Claude Discord Bot: Setup Required", "Claude Discord Bot: 설정 필요");
         }
         else if (running)
         {
-            SetTrayIcon(Color.LimeGreen);
-            trayIcon.Text = L("Claude Discord Bot: Running", "Claude Discord Bot: 실행 중");
+            color = Color.LimeGreen;
+            text = L("Claude Discord Bot: Running", "Claude Discord Bot: 실행 중");
         }
         else
         {
-            SetTrayIcon(Color.Red);
-            trayIcon.Text = L("Claude Discord Bot: Stopped", "Claude Discord Bot: 중지됨");
+            color = Color.Red;
+            text = L("Claude Discord Bot: Stopped", "Claude Discord Bot: 중지됨");
         }
+
+        bool changed = (text != lastStatusText);
+        SetTrayIcon(color);
+        trayIcon.Text = text;
+        lastStatusText = text;
+        return changed;
     }
 
     private void BuildMenu()
@@ -404,7 +431,15 @@ class ClaudeBotTray : Form
         menu.Items.Add(L("Quit", "종료"), null, QuitAll);
 
         trayIcon.ContextMenuStrip = menu;
-        if (oldMenu != null) { try { oldMenu.Dispose(); } catch { } }
+        if (oldMenu != null)
+        {
+            try
+            {
+                foreach (ToolStripItem item in oldMenu.Items) { try { item.Dispose(); } catch { } }
+                oldMenu.Dispose();
+            }
+            catch { }
+        }
     }
 
     private void StartBot(object sender, EventArgs e)
@@ -830,7 +865,8 @@ class ClaudeBotTray : Form
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(
             Math.Min(bgColor.R + 20, 255), Math.Min(bgColor.G + 20, 255), Math.Min(bgColor.B + 20, 255));
-        btn.Region = new Region(RoundedRect(new Rectangle(0, 0, width, height), 8));
+        using (var path = RoundedRect(new Rectangle(0, 0, width, height), 8))
+            btn.Region = new Region(path);
         return btn;
     }
 
@@ -972,11 +1008,13 @@ class ClaudeBotTray : Form
         string statusText = !hasEnv ? L("Setup Required", "설정 필요") : botStarting ? L("Starting...", "시작 중...") : (running ? L("Running", "실행 중") : L("Stopped", "중지됨"));
         Color statusColor = !hasEnv ? Color.Orange : botStarting ? Color.Yellow : (running ? Color.LimeGreen : Color.Red);
         var statusPanel = new Panel() { Left = 25, Top = y, Width = btnWidth, Height = 50, BackColor = BgPanel };
-        statusPanel.Region = new Region(RoundedRect(new Rectangle(0, 0, btnWidth, 50), 8));
+        using (var path = RoundedRect(new Rectangle(0, 0, btnWidth, 50), 8))
+            statusPanel.Region = new Region(path);
         var statusDot = new Label() { Left = 14, Top = 14, Width = 24, Height = 24, Text = "", BackColor = Color.Transparent };
         statusDot.Paint += (s, e) => {
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            e.Graphics.FillEllipse(new SolidBrush(statusColor), 2, 2, 18, 18);
+            using (var brush = new SolidBrush(statusColor))
+                e.Graphics.FillEllipse(brush, 2, 2, 18, 18);
         };
         statusPanel.Controls.Add(statusDot);
         var statusLabel = new Label() {

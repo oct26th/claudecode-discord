@@ -5,6 +5,14 @@ import { getConfig } from "../utils/config.js";
 // Rate limit: track requests per user
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
 
+// Periodically clean up expired rate limit entries to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of requestCounts) {
+    if (now > entry.resetAt) requestCounts.delete(key);
+  }
+}, 300_000); // every 5 minutes
+
 export function isAllowedUser(userId: string): boolean {
   const config = getConfig();
   return config.ALLOWED_USER_IDS.includes(userId);
