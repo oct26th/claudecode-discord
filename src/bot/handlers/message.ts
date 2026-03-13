@@ -68,6 +68,11 @@ export async function handleMessage(message: Message): Promise<void> {
   const project = getProject(message.channelId);
   if (!project) return;
 
+  // Mention-only mode: skip messages that don't @mention the bot
+  if (project.mention_only && !message.mentions.has(message.client.user!)) {
+    return;
+  }
+
   // Auth check
   if (!isAllowedUser(message.author.id)) {
     await message.reply(L("You are not authorized to use this bot.", "이 봇을 사용할 권한이 없습니다."));
@@ -90,7 +95,8 @@ export async function handleMessage(message: Message): Promise<void> {
     return;
   }
 
-  let prompt = message.content.trim();
+  // Strip @mention tags from prompt so Claude sees clean text
+  let prompt = message.content.replace(/<@!?\d+>/g, "").trim();
 
   // Download attachments (images, documents, code files, etc.)
   const imagePaths: string[] = [];
