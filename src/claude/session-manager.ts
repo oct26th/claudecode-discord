@@ -1,4 +1,4 @@
-import { query, type Query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Query, type ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 import type { TextChannel } from "discord.js";
 import {
@@ -7,6 +7,9 @@ import {
   getProject,
   getSession,
   setAutoApprove,
+  incrementTurnCount,
+  addSessionCost,
+  clearSessionData,
 } from "../db/database.js";
 import { getConfig } from "../utils/config.js";
 import { L } from "../utils/i18n.js";
@@ -53,6 +56,7 @@ class SessionManager {
   private static readonly MAX_QUEUE_SIZE = 5;
   private messageQueue = new Map<string, { channel: TextChannel; prompt: string }[]>();
   private pendingQueuePrompts = new Map<string, { channel: TextChannel; prompt: string }>();
+  private cachedModels: ModelInfo[] = [];
 
   async sendMessage(
     channel: TextChannel,
@@ -66,7 +70,19 @@ class SessionManager {
     // If no in-memory session, check DB for previous session_id (for bot restart resume)
     const dbSession = !existingSession ? getSession(channelId) : undefined;
     const dbId = existingSession?.dbId ?? dbSession?.id ?? randomUUID();
-    const resumeSessionId = existingSession?.sessionId ?? dbSession?.session_id ?? undefined;
+    let resumeSessionId = existingSession?.sessionId ?? dbSession?.session_id ?? undefined;
+
+    // TTL check: expire idle sessions
+    const ttlHours = getConfig().SESSION_TTL_HOURS;
+    if (ttlHours > 0 && dbSession?.last_activity) {
+      const lastActive = new Date(dbSession.last_activity + "Z").getTime();
+      const expiredMs = ttlHours * 60 * 60 * 1000;
+      if (Date.now() - lastActive > expiredMs) {
+        clearSessionData(channelId);
+        resumeSessionId = undefined;
+        channel.send(`ℹ️ Session expired (idle > ${ttlHours}h). Starting fresh.`).catch(() => {});
+      }
+    }
 
     // Update status to online
     upsertSession(dbId, channelId, resumeSessionId ?? null, "online");
@@ -110,7 +126,10 @@ class SessionManager {
         options: {
           cwd: project.project_path,
           permissionMode: "default",
+          executable: "node",
+          env: { ...process.env, PATH: `/usr/local/bin:/opt/homebrew/bin:${process.env.PATH ?? ""}` },
           ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+          ...(project.model ? { model: project.model } : {}),
 
           canUseTool: async (
             toolName: string,
@@ -285,6 +304,11 @@ class SessionManager {
             if (active) active.sessionId = sdkSessionId;
             upsertSession(dbId, channelId, sdkSessionId, "online");
           }
+
+          // Cache supported models for /model autocomplete
+          queryInstance.supportedModels().then((models) => {
+            if (models.length > 0) this.cachedModels = models;
+          }).catch(() => { /* ignore */ });
         }
 
         // Handle streaming text
@@ -358,6 +382,22 @@ class SessionManager {
             getConfig().SHOW_COST,
           );
           await channel.send({ embeds: [resultEmbed] });
+
+          // Track cost and turns
+          if (resultMsg.total_cost_usd) {
+            addSessionCost(channelId, resultMsg.total_cost_usd);
+          }
+          incrementTurnCount(channelId);
+
+          // Check turn limit
+          const maxTurns = getConfig().SESSION_MAX_TURNS;
+          if (maxTurns > 0) {
+            const currentSession = getSession(channelId);
+            if (currentSession && currentSession.turn_count >= maxTurns) {
+              clearSessionData(channelId);
+              channel.send(`⚠️ Context limit reached (${maxTurns} turns). Session cleared — next message starts fresh.`).catch(() => {});
+            }
+          }
 
           updateSessionStatus(channelId, "idle");
         }
@@ -447,6 +487,10 @@ class SessionManager {
 
   isActive(channelId: string): boolean {
     return this.sessions.has(channelId);
+  }
+
+  getCachedModels(): ModelInfo[] {
+    return this.cachedModels;
   }
 
   resolveApproval(

@@ -29,6 +29,12 @@ export function initDatabase(): void {
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrations: add new columns if they don't exist
+  try { db.exec("ALTER TABLE projects ADD COLUMN model TEXT DEFAULT NULL"); } catch { /* column already exists */ }
+  try { db.exec("ALTER TABLE projects ADD COLUMN mention_only INTEGER DEFAULT 0"); } catch { /* column already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN turn_count INTEGER DEFAULT 0"); } catch { /* column already exists */ }
+  try { db.exec("ALTER TABLE sessions ADD COLUMN total_cost_usd REAL DEFAULT 0"); } catch { /* column already exists */ }
 }
 
 export function getDb(): Database.Database {
@@ -75,6 +81,26 @@ export function setAutoApprove(
   );
 }
 
+export function setModel(
+  channelId: string,
+  model: string | null,
+): void {
+  db.prepare("UPDATE projects SET model = ? WHERE channel_id = ?").run(
+    model,
+    channelId,
+  );
+}
+
+export function setMentionOnly(
+  channelId: string,
+  mentionOnly: boolean,
+): void {
+  db.prepare("UPDATE projects SET mention_only = ? WHERE channel_id = ?").run(
+    mentionOnly ? 1 : 0,
+    channelId,
+  );
+}
+
 // Session queries
 export function upsertSession(
   id: string,
@@ -104,6 +130,20 @@ export function updateSessionStatus(
   db.prepare(
     "UPDATE sessions SET status = ?, last_activity = datetime('now') WHERE channel_id = ?",
   ).run(status, channelId);
+}
+
+export function incrementTurnCount(channelId: string): void {
+  db.prepare("UPDATE sessions SET turn_count = turn_count + 1 WHERE channel_id = ?").run(channelId);
+}
+
+export function addSessionCost(channelId: string, cost: number): void {
+  db.prepare("UPDATE sessions SET total_cost_usd = total_cost_usd + ? WHERE channel_id = ?").run(cost, channelId);
+}
+
+export function clearSessionData(channelId: string): void {
+  db.prepare(
+    "UPDATE sessions SET session_id = NULL, turn_count = 0, total_cost_usd = 0, last_activity = datetime('now') WHERE channel_id = ?",
+  ).run(channelId);
 }
 
 export function getAllSessions(guildId: string): (Session & { project_path: string })[] {

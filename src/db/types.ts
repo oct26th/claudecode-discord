@@ -5,6 +5,8 @@ export interface Project {
   project_path: string;
   guild_id: string;
   auto_approve: number; // 0 or 1
+  model: string | null;
+  mention_only: number; // 0 or 1
   created_at: string;
 }
 
@@ -15,4 +17,6 @@ export interface Session {
   status: SessionStatus;
   last_activity: string | null;
   created_at: string;
+  turn_count: number;
+  total_cost_usd: number;
 }
