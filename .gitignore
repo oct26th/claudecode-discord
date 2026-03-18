@@ -13,6 +13,7 @@ CLAUDE.md
 .tray.pid
 bot.log
 bot-error.log
+logs/
 menubar/ClaudeBotMenu
 tray/ClaudeBotTray.exe
 ClaudeBot.exe

@@ -61,8 +61,9 @@ async function downloadAttachment(
 }
 
 export async function handleMessage(message: Message): Promise<void> {
-  // Ignore bots and DMs
-  if (message.author.bot || !message.guild) return;
+  // Ignore DMs; ignore bot messages unless the bot @mentions this bot
+  if (!message.guild) return;
+  if (message.author.bot && !message.mentions.has(message.client.user!)) return;
 
   // Check if channel is registered
   const project = getProject(message.channelId);
