@@ -15,6 +15,7 @@ const envSchema = z.object({
     .transform((v) => v === "true"),
   SESSION_TTL_HOURS: z.coerce.number().int().min(0).default(24),
   SESSION_MAX_TURNS: z.coerce.number().int().min(0).default(50),
+  DB_PATH: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;

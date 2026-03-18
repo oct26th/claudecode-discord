@@ -160,9 +160,9 @@ generate_plist() {
     <key>WorkingDirectory</key>
     <string>$SCRIPT_DIR</string>
     <key>KeepAlive</key>
-    <false/>
+    <true/>
     <key>ThrottleInterval</key>
-    <integer>10</integer>
+    <integer>30</integer>
     <key>StandardOutPath</key>
     <string>$SCRIPT_DIR/bot.log</string>
     <key>StandardErrorPath</key>

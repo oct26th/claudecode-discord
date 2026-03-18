@@ -78,7 +78,7 @@ class SessionManager {
       const lastActive = new Date(dbSession.last_activity + "Z").getTime();
       const expiredMs = ttlHours * 60 * 60 * 1000;
       if (Date.now() - lastActive > expiredMs) {
-        clearSessionData(channelId);
+        clearSessionData(channelId); // safe: returns boolean, won't throw
         resumeSessionId = undefined;
         channel.send(`ℹ️ Session expired (idle > ${ttlHours}h). Starting fresh.`).catch(() => {});
       }
@@ -200,6 +200,7 @@ class SessionManager {
                     if (ci?.requestId === qRequestId) {
                       pendingCustomInputs.delete(channelId);
                     }
+                    channel.send(L("⏰ Question timed out (5 min).", "⏰ 질문 시간 초과 (5분).")).catch(() => {});
                     resolve(null);
                   }, 5 * 60 * 1000);
 
@@ -262,6 +263,7 @@ class SessionManager {
               const timeout = setTimeout(() => {
                 pendingApprovals.delete(requestId);
                 updateSessionStatus(channelId, "online");
+                channel.send(L("⏰ Tool approval timed out (5 min). Skipping this tool.", "⏰ 도구 승인 시간 초과 (5분). 이 도구를 건너뜁니다.")).catch(() => {});
                 resolve({ behavior: "deny" as const, message: "Approval timed out" });
               }, 5 * 60 * 1000);
 

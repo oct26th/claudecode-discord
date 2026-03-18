@@ -1,5 +1,6 @@
 import {
   Client,
+  Events,
   GatewayIntentBits,
   REST,
   Routes,
@@ -49,7 +50,7 @@ export async function startBot(): Promise<Client> {
   });
 
   // Register slash commands after successful login (network guaranteed)
-  client.on("ready", async () => {
+  client.on(Events.ClientReady, async () => {
     console.log(`Bot logged in as ${client.user?.tag}`);
     try {
       const rest = new REST({ version: "10" }).setToken(config.DISCORD_BOT_TOKEN);
@@ -68,7 +69,7 @@ export async function startBot(): Promise<Client> {
   });
 
   // Handle interactions (slash commands + buttons)
-  client.on("interactionCreate", async (interaction: Interaction) => {
+  client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     try {
       if (interaction.isAutocomplete()) {
         const command = commandMap.get(interaction.commandName);
@@ -118,7 +119,7 @@ export async function startBot(): Promise<Client> {
   });
 
   // Handle messages (wrapped with error handler to prevent silent hangs)
-  client.on("messageCreate", async (message) => {
+  client.on(Events.MessageCreate, async (message) => {
     try {
       await handleMessage(message);
     } catch (error) {

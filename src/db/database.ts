@@ -1,15 +1,68 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import type { Project, Session, SessionStatus } from "./types.js";
 
-const DB_PATH = path.join(process.cwd(), "data.db");
+function resolveDbPath(): string {
+  const envPath = process.env.DB_PATH;
+  if (envPath) return envPath;
+
+  const dir = path.join(os.homedir(), ".claude-discord-bot");
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, "data.db");
+}
+
+const DB_PATH = resolveDbPath();
 
 let db: Database.Database;
 
+// Retry wrapper for write operations
+function safeWrite<T extends unknown[]>(label: string, fn: (...args: T) => void): (...args: T) => boolean {
+  return (...args: T) => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        fn(...args);
+        return true;
+      } catch (err) {
+        console.warn(`[db:${label}] attempt ${i + 1}/3 failed:`, err instanceof Error ? err.message : err);
+      }
+    }
+    console.error(`[db:${label}] all 3 attempts failed`);
+    return false;
+  };
+}
+
+// Retry wrapper for read operations
+function safeRead<T extends unknown[], R>(label: string, fallback: R, fn: (...args: T) => R): (...args: T) => R {
+  return (...args: T) => {
+    try {
+      return fn(...args);
+    } catch (err) {
+      console.error(`[db:${label}] read failed:`, err instanceof Error ? err.message : err);
+      return fallback;
+    }
+  };
+}
+
 export function initDatabase(): void {
+  // Migrate: copy old data.db from cwd if it exists and new path is empty
+  const oldPath = path.join(process.cwd(), "data.db");
+  if (oldPath !== DB_PATH && fs.existsSync(oldPath) && !fs.existsSync(DB_PATH)) {
+    console.log(`[db] Migrating database from ${oldPath} to ${DB_PATH}`);
+    fs.copyFileSync(oldPath, DB_PATH);
+    for (const ext of ["-wal", "-shm"]) {
+      if (fs.existsSync(oldPath + ext)) {
+        fs.copyFileSync(oldPath + ext, DB_PATH + ext);
+      }
+    }
+  }
+
   db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
+  console.log(`[db] Database opened at ${DB_PATH}`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
@@ -42,111 +95,112 @@ export function getDb(): Database.Database {
 }
 
 // Project queries
-export function registerProject(
+export const registerProject = safeWrite("registerProject", (
   channelId: string,
   projectPath: string,
   guildId: string,
-): void {
-  const stmt = db.prepare(`
+): void => {
+  db.prepare(`
     INSERT OR REPLACE INTO projects (channel_id, project_path, guild_id)
     VALUES (?, ?, ?)
-  `);
-  stmt.run(channelId, projectPath, guildId);
-}
+  `).run(channelId, projectPath, guildId);
+});
 
-export function unregisterProject(channelId: string): void {
-  db.prepare("DELETE FROM sessions WHERE channel_id = ?").run(channelId);
-  db.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
-}
+export const unregisterProject = safeWrite("unregisterProject", (channelId: string): void => {
+  const txn = db.transaction(() => {
+    db.prepare("DELETE FROM sessions WHERE channel_id = ?").run(channelId);
+    db.prepare("DELETE FROM projects WHERE channel_id = ?").run(channelId);
+  });
+  txn();
+});
 
-export function getProject(channelId: string): Project | undefined {
+export const getProject = safeRead("getProject", undefined as Project | undefined, (channelId: string): Project | undefined => {
   return db
     .prepare("SELECT * FROM projects WHERE channel_id = ?")
     .get(channelId) as Project | undefined;
-}
+});
 
-export function getAllProjects(guildId: string): Project[] {
+export const getAllProjects = safeRead("getAllProjects", [] as Project[], (guildId: string): Project[] => {
   return db
     .prepare("SELECT * FROM projects WHERE guild_id = ?")
     .all(guildId) as Project[];
-}
+});
 
-export function setAutoApprove(
+export const setAutoApprove = safeWrite("setAutoApprove", (
   channelId: string,
   autoApprove: boolean,
-): void {
+): void => {
   db.prepare("UPDATE projects SET auto_approve = ? WHERE channel_id = ?").run(
     autoApprove ? 1 : 0,
     channelId,
   );
-}
+});
 
-export function setModel(
+export const setModel = safeWrite("setModel", (
   channelId: string,
   model: string | null,
-): void {
+): void => {
   db.prepare("UPDATE projects SET model = ? WHERE channel_id = ?").run(
     model,
     channelId,
   );
-}
+});
 
-export function setMentionOnly(
+export const setMentionOnly = safeWrite("setMentionOnly", (
   channelId: string,
   mentionOnly: boolean,
-): void {
+): void => {
   db.prepare("UPDATE projects SET mention_only = ? WHERE channel_id = ?").run(
     mentionOnly ? 1 : 0,
     channelId,
   );
-}
+});
 
 // Session queries
-export function upsertSession(
+export const upsertSession = safeWrite("upsertSession", (
   id: string,
   channelId: string,
   sessionId: string | null,
   status: SessionStatus,
-): void {
-  const stmt = db.prepare(`
+): void => {
+  db.prepare(`
     INSERT OR REPLACE INTO sessions (id, channel_id, session_id, status, last_activity)
     VALUES (?, ?, ?, ?, datetime('now'))
-  `);
-  stmt.run(id, channelId, sessionId, status);
-}
+  `).run(id, channelId, sessionId, status);
+});
 
-export function getSession(channelId: string): Session | undefined {
+export const getSession = safeRead("getSession", undefined as Session | undefined, (channelId: string): Session | undefined => {
   return db
     .prepare(
       "SELECT * FROM sessions WHERE channel_id = ? ORDER BY created_at DESC LIMIT 1",
     )
     .get(channelId) as Session | undefined;
-}
+});
 
-export function updateSessionStatus(
+export const updateSessionStatus = safeWrite("updateSessionStatus", (
   channelId: string,
   status: SessionStatus,
-): void {
+): void => {
   db.prepare(
     "UPDATE sessions SET status = ?, last_activity = datetime('now') WHERE channel_id = ?",
   ).run(status, channelId);
-}
+});
 
-export function incrementTurnCount(channelId: string): void {
+export const incrementTurnCount = safeWrite("incrementTurnCount", (channelId: string): void => {
   db.prepare("UPDATE sessions SET turn_count = turn_count + 1 WHERE channel_id = ?").run(channelId);
-}
+});
 
-export function addSessionCost(channelId: string, cost: number): void {
+export const addSessionCost = safeWrite("addSessionCost", (channelId: string, cost: number): void => {
   db.prepare("UPDATE sessions SET total_cost_usd = total_cost_usd + ? WHERE channel_id = ?").run(cost, channelId);
-}
+});
 
-export function clearSessionData(channelId: string): void {
+export const clearSessionData = safeWrite("clearSessionData", (channelId: string): void => {
   db.prepare(
     "UPDATE sessions SET session_id = NULL, turn_count = 0, total_cost_usd = 0, last_activity = datetime('now') WHERE channel_id = ?",
   ).run(channelId);
-}
+});
 
-export function getAllSessions(guildId: string): (Session & { project_path: string })[] {
+export const getAllSessions = safeRead("getAllSessions", [] as (Session & { project_path: string })[], (guildId: string): (Session & { project_path: string })[] => {
   return db
     .prepare(`
       SELECT s.*, p.project_path FROM sessions s
@@ -154,4 +208,4 @@ export function getAllSessions(guildId: string): (Session & { project_path: stri
       WHERE p.guild_id = ?
     `)
     .all(guildId) as (Session & { project_path: string })[];
-}
+});
