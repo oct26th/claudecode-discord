@@ -126,7 +126,7 @@ class SessionManager {
         options: {
           cwd: project.project_path,
           permissionMode: "default",
-          executable: "node",
+          executable: process.execPath, // absolute path to node (avoids PATH issues in pm2)
           env: { ...process.env, PATH: `/usr/local/bin:/opt/homebrew/bin:${process.env.PATH ?? ""}` },
           ...(resumeSessionId ? { resume: resumeSessionId } : {}),
           ...(project.model ? { model: project.model } : {}),
